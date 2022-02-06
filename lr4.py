@@ -1,7 +1,6 @@
 from multiprocessing import Process
 import threading
 import numpy as np
-from sqlalchemy import true
 from winsys import ipc
 import win32pipe, win32file, pywintypes
 from time import sleep
@@ -45,7 +44,7 @@ def multi2():
                 res = str(resp).split("'")[1].split('*')
                 result = 1
                 for i in res:
-                    print(res)
+                    result *= float(i)
                 name = r'\\.\pipe\Foo1'
                 pipe = win32pipe.CreateNamedPipe(
                     name,
@@ -55,7 +54,6 @@ def multi2():
                     0,
                     None
                 )
-                result *= float(i)
                 flag = False
                 while True:
                     try:
@@ -78,11 +76,29 @@ def multi2():
             sleep(0.1)
 
 
+def worker(data):
+    threading.Thread(target=multi1).start()
+    name = r"\\*\mailslot\first"
+    mail = ipc.mailslot(name)
+    mail.put(data)
+    print('finish 1')
+    name = "first-resp"
+    d = 0
+    with ipc.mailslot(name) as l:
+        while True:
+            word = l.get()
+            sw = str(word)
+            if '.' in sw:
+                d += float(word)
+                break
+    return d
+
+
 if __name__ == "__main__":
     matrix = np.array([
-        [1, 0, -2],
-        [0.5, 3, 1],
-        [0, 2, -1]
+        [1, 3, 4],
+        [0, 2, 1],
+        [1, 5, -1]
     ])
     threading.Thread(target=multi1).start()
     name = r"\\*\mailslot\first"
@@ -115,7 +131,7 @@ if __name__ == "__main__":
         try:
             print("waiting for client")
             win32pipe.ConnectNamedPipe(pipe, None)
-            some_data = str.encode(f"{matrix[0][1]}*{matrix[1][2]}*{matrix[2][1]}")
+            some_data = str.encode(f"{matrix[2][0]}*{matrix[0][1]}*{matrix[1][2]}")
             win32file.WriteFile(pipe, some_data)
             sleep(1)
             win32file.CloseHandle(pipe)
@@ -144,7 +160,9 @@ if __name__ == "__main__":
             while True:
                 resp = win32file.ReadFile(handle, 64*1024)
                 if 'b' in str(resp):
-                    print(str(resp).split(',')[1].split("'")[1])
+                    dd = float(str(resp).split(',')[1].split("'")[1])
+                    print(dd)
+                    d += dd
                     flag = True
                     break
             if flag:
@@ -152,3 +170,16 @@ if __name__ == "__main__":
         except pywintypes.error as e:
             print(e, '2 часть')
             sleep(0.1)
+    dd = worker(f"{matrix[1][0]}*{matrix[2][1]}*{matrix[0][2]}")
+    d += dd
+    print(dd)
+    dd = worker(f"{matrix[2][0]}*{matrix[1][1]}*{matrix[0][2]}")
+    d -= dd
+    print(dd)
+    dd = worker(f"{matrix[1][0]}*{matrix[0][1]}*{matrix[2][2]}")
+    d -= dd
+    print(dd)
+    dd = worker(f"{matrix[0][0]}*{matrix[1][2]}*{matrix[2][1]}")
+    d -= dd
+    print(dd)
+    print('result: ',d)
