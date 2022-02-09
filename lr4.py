@@ -7,15 +7,16 @@ from time import sleep
 
 
 def multi1():
+    # подключаемся к ящику
     with ipc.mailslot("first") as l:
         while True:
-            word = l.get()
+            word = l.get()  # получаем сообщение
             if '*' in word:
                 data = 1
                 for i in word.split('*'):
                     data *= float(i)
                 name = r"\\*\mailslot\first-resp"
-                mail = ipc.mailslot(name)
+                mail = ipc.mailslot(name)  # отправляем ответ в еще один ящик
                 mail.put(data)
                 break
             else:
@@ -27,6 +28,7 @@ def multi2():
     quit = False
     while not quit:
         try:
+            # подключение к каналу
             handle = win32file.CreateFile(
                 r'\\.\pipe\Foo',
                 win32file.GENERIC_READ | win32file.GENERIC_WRITE,
@@ -40,11 +42,13 @@ def multi2():
             if res == 0:
                 print(f"SetNamedPipeHandleState return code: {res}")
             while True:
+                # получаем инфу из канала
                 resp = win32file.ReadFile(handle, 64*1024)
                 res = str(resp).split("'")[1].split('*')
                 result = 1
                 for i in res:
                     result *= float(i)
+                # создаем другой канал и пишем туда инфу и получаем так же обратно в основном потоке
                 name = r'\\.\pipe\Foo1'
                 pipe = win32pipe.CreateNamedPipe(
                     name,
@@ -100,13 +104,15 @@ if __name__ == "__main__":
         [0, 2, 1],
         [1, 5, -1]
     ])
+    # вот матрица для примера
     threading.Thread(target=multi1).start()
     name = r"\\*\mailslot\first"
-    mail = ipc.mailslot(name)
+    mail = ipc.mailslot(name)  # отправляем в ящик нужную информацию
     mail.put(f"{matrix[0][0]}*{matrix[1][1]}*{matrix[2][2]}")
     print('finish 1')
     name = "first-resp"
     d = 0
+    # читаем данные из ящика
     with ipc.mailslot(name) as l:
         while True:
             word = l.get()
@@ -116,6 +122,7 @@ if __name__ == "__main__":
                 break
     print(d)
 
+    # создаем канал
     name = r'\\.\pipe\Foo'
     pipe = win32pipe.CreateNamedPipe(
         name,
@@ -125,14 +132,15 @@ if __name__ == "__main__":
         0,
         None
     )
+    # запускаем поток 
     threading.Thread(target=multi2).start()
     while True:
         print("waiting for client")
         try:
             print("waiting for client")
-            win32pipe.ConnectNamedPipe(pipe, None)
+            win32pipe.ConnectNamedPipe(pipe, None)  # коннектикмся к каналу
             some_data = str.encode(f"{matrix[2][0]}*{matrix[0][1]}*{matrix[1][2]}")
-            win32file.WriteFile(pipe, some_data)
+            win32file.WriteFile(pipe, some_data)  # записываем данные
             sleep(1)
             win32file.CloseHandle(pipe)
             break
